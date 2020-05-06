@@ -48,12 +48,6 @@ int32_t main(int32_t argc, char **argv) {
           control.command(0);
         }
         od4.send(control);
-
-        if (msg.time() >= 100) {
-          tme290::grass::Restart restart;
-          restart.seed(1234);
-          od4.send(restart);
-        }
       }};
 
     auto onStatus{[&verbose](cluon::data::Envelope &&envelope)
@@ -74,7 +68,7 @@ int32_t main(int32_t argc, char **argv) {
     }
 
     tme290::grass::Control control;
-    control.command(5);
+    control.command(0);
     od4.send(control);
 
     while (od4.isRunning()) {
