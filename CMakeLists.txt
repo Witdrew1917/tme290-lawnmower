@@ -20,7 +20,7 @@ project(tme290-lawnmower)
 ################################################################################
 # Defining the relevant versions of OpenDLV Standard Message Set and libcluon.
 set(TME290_GRASS_MSG tme290-sim-grass-msg.odvd)
-set(CLUON_COMPLETE cluon-complete-v0.0.120.hpp)
+set(CLUON_COMPLETE cluon-complete-v0.0.127.hpp)
 
 ################################################################################
 # This project requires C++14 or newer.
@@ -71,6 +71,7 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp
 
 # Add current build directory as include directory as it contains generated files.
 include_directories(SYSTEM ${CMAKE_BINARY_DIR})
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 ################################################################################
@@ -82,6 +83,10 @@ set(LIBRARIES Threads::Threads)
 add_executable(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp)
 target_link_libraries(${PROJECT_NAME} ${LIBRARIES})
 
+add_executable(${PROJECT_NAME}-trainer ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}-trainer.cpp ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp)
+target_link_libraries(${PROJECT_NAME}-trainer ${LIBRARIES})
+
 ################################################################################
 # Install executable.
 install(TARGETS ${PROJECT_NAME} DESTINATION bin COMPONENT ${PROJECT_NAME})
+install(TARGETS ${PROJECT_NAME}-trainer DESTINATION bin COMPONENT ${PROJECT_NAME}-trainer)
