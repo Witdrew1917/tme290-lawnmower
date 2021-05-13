@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Ola Benderius
+# Copyright (C) 2021 Ola Benderius
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-FROM alpine:3.11 as builder
+FROM alpine:3.13 as builder
 RUN apk update && \
   apk --no-cache add \
     cmake \
@@ -29,7 +29,7 @@ RUN mkdir build && \
     make && make install
 
 
-FROM alpine:3.11
+FROM alpine:3.13
 
 WORKDIR /usr/bin
 COPY --from=builder /tmp/build-dest/ /usr/
