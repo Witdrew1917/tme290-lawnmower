@@ -36,17 +36,27 @@ int32_t main(int32_t argc, char **argv) {
     
     cluon::OD4Session od4{cid};
 
-    auto onSensors{[&od4](cluon::data::Envelope &&envelope)
+   int32_t someVariable{0};
+
+    auto onSensors{[&od4, &someVariable](cluon::data::Envelope &&envelope)
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
         
+        someVariable++;
+
         tme290::grass::Control control;
-        if (msg.grassRight() >= 0) {
-          control.command(5);
-        } else {
+
+        // After 20 steps, start pausing on every other step.
+        if (someVariable > 20 && someVariable % 2 == 0) {
           control.command(0);
+        } else {
+          control.command(5);
         }
+
+        std::cout << "Rain reading " << msg.rain() << ", direction (" <<
+         msg.rainCloudDirX() << ", " << msg.rainCloudDirY() << ")" << std::endl; 
+
         od4.send(control);
       }};
 

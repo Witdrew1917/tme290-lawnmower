@@ -20,7 +20,7 @@ project(tme290-lawnmower)
 ################################################################################
 # Defining the relevant versions of OpenDLV Standard Message Set and libcluon.
 set(TME290_GRASS_MSG tme290-sim-grass-msg.odvd)
-set(CLUON_COMPLETE cluon-complete-v0.0.127.hpp)
+set(CLUON_COMPLETE cluon-complete-v0.0.140.hpp)
 
 ################################################################################
 # This project requires C++14 or newer.

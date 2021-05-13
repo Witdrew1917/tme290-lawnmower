@@ -23,7 +23,7 @@ message tme290.grass.Control [id = 7744] {
 message tme290.grass.Sensors [id = 7745] {
   uint32 i [id = 1];
   uint32 j [id = 2];
-  uint32 time [id = 3];
+  uint64 time [id = 3];
   float grassTopLeft [id = 4];
   float grassTopCentre [id = 5];
   float grassTopRight [id = 6];
@@ -35,10 +35,12 @@ message tme290.grass.Sensors [id = 7745] {
   float grassBottomRight [id = 12];
   float rain [id = 13];
   float battery [id = 14];
+  float rainCloudDirX [id = 15];
+  float rainCloudDirY [id = 16];
 }
 
 message tme290.grass.Status [id = 7746] {
-  uint32 time [id = 1];
+  uint64 time [id = 1];
   float grassMax [id = 2];
   float grassMean [id = 3];
 }
