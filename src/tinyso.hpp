@@ -55,6 +55,12 @@ class GeneticAlgorithm {
     Individual GetBestIndividual() const;
     int32_t GetGenerationIndex() const;
     void NextGeneration(uint32_t const);
+    Population GetPopulation() const;
+    Fitnesses GetFitnesses() const;
+    void SetCrossoverIndividuals(
+        std::function<std::pair<Individual, Individual>(Individual const &,
+          Individual const &)>);
+    void SetMutateIndividual(std::function<Individual(Individual const &)>);
 
   private:
     GeneticAlgorithm(GeneticAlgorithm const &);
@@ -71,8 +77,11 @@ class GeneticAlgorithm {
     Individual SelectTournament(Population const &, Fitnesses const &);
 
     std::default_random_engine m_generator;
+    std::function<std::pair<Individual, Individual>(Individual const &,
+        Individual const &)> m_crossover_individuals;
     std::function<double(Individual const &, uint32_t const)> 
       m_evaluate_individual;
+    std::function<Individual(Individual const &)> m_mutate_individual;
     CrossoverMethod m_crossover_method;
     Fitnesses m_fitnesses;
     Individual m_best_individual;
@@ -94,7 +103,9 @@ inline GeneticAlgorithm::GeneticAlgorithm(
     uint32_t const tournament_size, float prob_crossover, float prob_mutation,
     float prob_select_tournament):
   m_generator(time(0)),
+  m_crossover_individuals(nullptr),
   m_evaluate_individual(evaluate_individual),
+  m_mutate_individual(nullptr),
   m_crossover_method(crossover_method),
   m_fitnesses(),
   m_best_individual(),
@@ -118,6 +129,10 @@ inline GeneticAlgorithm::~GeneticAlgorithm()
 inline std::pair<Individual, Individual> GeneticAlgorithm::CrossoverIndividuals(
     Individual const &individual_1, Individual const &individual_2)
 {
+  if (m_crossover_individuals != nullptr) {
+    return m_crossover_individuals(individual_1, individual_2);
+  }
+
   switch (m_crossover_method) {
     case CrossoverMethod::Shuffle:
       {
@@ -174,26 +189,33 @@ inline Fitnesses GeneticAlgorithm::EvaluatePopulation(Population const &populati
     uint32_t const cores)
 {
   Fitnesses fitnesses(m_population_size);
+  std::mutex selection_mutex;
+  std::mutex fitness_write_mutex;
+  uint32_t evaluated = 0;
 
-  uint32_t ind_i{0};
-  std::mutex ind_mutex;
-
-  auto evaluate{[this, &population, &fitnesses, &ind_i, &ind_mutex]()
-    {
-      while (ind_i < m_population_size) {
-        uint32_t k;
-        {
-          std::lock_guard<std::mutex> const lock(ind_mutex);
-          k = ind_i++;
+  auto worker{[this, &population, &fitnesses, &evaluated, &selection_mutex,
+    &fitness_write_mutex]() {
+    while (evaluated < m_population_size) {
+      uint32_t index;
+      {
+        std::lock_guard<std::mutex> lock(selection_mutex);
+        if (evaluated >= m_population_size) {
+          break;
         }
-        Individual individual = population[k];
-        fitnesses[k] = m_evaluate_individual(individual, k);
+        index = evaluated;
+        evaluated++;
       }
-    }};
+      double fitness = m_evaluate_individual(population[index], index);
+      {
+        std::lock_guard<std::mutex> lock(fitness_write_mutex);
+        fitnesses[index] = fitness;
+      }
+    }
+  }};
 
   std::vector<std::thread> threads;
   for (uint32_t i{0}; i < cores; i++) {
-    threads.push_back(std::thread(evaluate));
+    threads.push_back(std::thread(worker));
   }
   for (auto &t : threads) {
     t.join();
@@ -230,6 +252,16 @@ inline int32_t GeneticAlgorithm::GetGenerationIndex() const
   return m_generation_index;
 }
 
+inline Population GeneticAlgorithm::GetPopulation() const
+{
+  return m_population;
+}
+
+inline Fitnesses GeneticAlgorithm::GetFitnesses() const
+{
+  return m_fitnesses;
+}
+
 inline uint32_t GeneticAlgorithm::GetRandomInteger(uint32_t min, uint32_t max)
 {
   std::uniform_int_distribution<uint32_t> int_distribution(min, max);
@@ -238,7 +270,7 @@ inline uint32_t GeneticAlgorithm::GetRandomInteger(uint32_t min, uint32_t max)
 
 inline double GeneticAlgorithm::GetRandomCreep()
 {
-  std::normal_distribution<double> normal_distribution(0.0, 0.1); // TODO.
+  std::normal_distribution<double> normal_distribution(0.0, 0.1);
   return normal_distribution(m_generator);
 }
 
@@ -254,30 +286,34 @@ inline float GeneticAlgorithm::GetRandomFloat()
   return uniform_distribution(m_generator);
 }
 
-inline Individual GeneticAlgorithm::MutateIndividual(Individual const &individual)
+inline Individual GeneticAlgorithm::MutateIndividual(
+    Individual const &individual)
 {
-  uint32_t const individual_length = individual.size();
-  Individual individual_mutated(individual_length);
+  if (m_mutate_individual != nullptr) {
+    return m_mutate_individual(individual);
+  }
 
-  for (uint32_t i = 0; i < individual_length; ++i) {
-    float const r = GetRandomFloat();
-    if (r < m_prob_mutation) {
+  float const r = GetRandomFloat();
+  if (r < m_prob_mutation) {
+    uint32_t const individual_length = individual.size();
+    Individual individual_mutated(individual_length);
+    for (uint32_t i = 0; i < individual_length; ++i) {
       double m = GetRandomCreep();
 
       double x = individual[i] + m;
       if (x < 0.0) {
-        x = 0.0;
+        x = -x;
       }
       if (x > 1.0) {
-        x = 1.0;
+        x = 2.0 - x;
       }
 
       individual_mutated[i] = x;
-    } else {
-      individual_mutated[i] = individual[i];
     }
+    return individual_mutated;
+  } else {
+    return individual;
   }
-  return individual_mutated;
 }
 
 inline void GeneticAlgorithm::NextGeneration(uint32_t cores)
@@ -286,9 +322,14 @@ inline void GeneticAlgorithm::NextGeneration(uint32_t cores)
 
   m_fitnesses = EvaluatePopulation(m_population, cores);
 
-  auto result = std::max_element(m_fitnesses.begin(), m_fitnesses.end());
-  uint32_t i_highest = std::distance(m_fitnesses.begin(), result);
-  double highest_fitness = m_fitnesses[i_highest];
+  uint32_t i_highest{0};
+  double highest_fitness{std::numeric_limits<double>::lowest()};
+  for (uint32_t i{0}; i < m_fitnesses.size(); i++) {
+    if (!std::isnan(m_fitnesses[i]) && m_fitnesses[i] > highest_fitness) {
+      i_highest = i;
+      highest_fitness = m_fitnesses[i];
+    }
+  }
 
   if (highest_fitness > m_best_fitness) {
     m_best_fitness = highest_fitness;
@@ -297,15 +338,11 @@ inline void GeneticAlgorithm::NextGeneration(uint32_t cores)
 
   Population population_new(m_population_size);
 
-  uint32_t elites_left = m_elite_size;
-  for (uint32_t i = 0; i < m_population_size; i = i + 2) {
-    if (elites_left >= 2) {
-      population_new[i] = m_best_individual;
-      population_new[i+1] = m_best_individual;
-      elites_left -= 2;
-      continue;
-    }
+  for (uint32_t i{0}; i < m_elite_size; i++) {
+    population_new[i] = m_best_individual;
+  }
 
+  for (uint32_t i{m_elite_size}; i < m_population_size; i = i + 2) {
     Individual individual_selected_1 = SelectTournament(m_population,
         m_fitnesses);
     Individual individual_selected_2 = SelectTournament(m_population,
@@ -314,17 +351,14 @@ inline void GeneticAlgorithm::NextGeneration(uint32_t cores)
     std::pair<Individual, Individual> individual_pair = CrossoverIndividuals(
         individual_selected_1, individual_selected_2);
 
-    if (elites_left == 1) {
-      population_new[i] = m_best_individual;
-      elites_left = 0;
-    } else {
-      Individual individual_mutated_1 =
-        MutateIndividual(individual_pair.first);
-      population_new[i] = individual_mutated_1;
-    }
+    Individual individual_mutated_1 = MutateIndividual(individual_pair.first);
+    population_new[i] = individual_mutated_1;
 
-    Individual individual_mutated_2 = MutateIndividual(individual_pair.second);
-    population_new[i+1] = individual_mutated_2;
+    if (i + 1 < m_population_size) {
+      Individual individual_mutated_2 = MutateIndividual(
+          individual_pair.second);
+      population_new[i + 1] = individual_mutated_2;
+    }
   }
 
   m_population = population_new;
@@ -350,6 +384,18 @@ inline Individual GeneticAlgorithm::SelectTournament(Population const &populatio
   return population[index_best];
 }
 
+void GeneticAlgorithm::SetCrossoverIndividuals(std::function<std::pair<
+    Individual, Individual>(Individual const &, Individual const &)> 
+    crossover_individuals)
+{
+  m_crossover_individuals = crossover_individuals;
+}
+
+void GeneticAlgorithm::SetMutateIndividual(
+    std::function<Individual(Individual const &)> mutate_individual)
+{
+  m_mutate_individual = mutate_individual;
+}
 
 }
 
