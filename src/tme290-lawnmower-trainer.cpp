@@ -158,6 +158,8 @@ int32_t main(int32_t argc, char **argv) {
           }
           od4.send(restart);
 
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
           cidLocks[cid].unlock();
         }
         return 1.0 / eta;
