@@ -21,71 +21,75 @@
 #include "tme290-sim-grass-msg.hpp"
 
 int32_t main(int32_t argc, char **argv) {
-  int32_t retCode{0};
-  auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
-  if (0 == commandlineArguments.count("cid")) {
-    std::cerr << argv[0] 
-      << " is a lawn mower control algorithm." << std::endl;
-    std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDLV session>" 
-      << "[--verbose]" << std::endl;
-    std::cerr << "Example: " << argv[0] << " --cid=111 --verbose" << std::endl;
-    retCode = 1;
-  } else {
-    bool const verbose{commandlineArguments.count("verbose") != 0};
-    uint16_t const cid = std::stoi(commandlineArguments["cid"]);
+    int32_t retCode{0};
+    auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
+    if (0 == commandlineArguments.count("cid")) {
+        std::cerr << argv[0] 
+            << " is a lawn mower control algorithm." << std::endl;
+        std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDLV session>" 
+            << "[--verbose]" << std::endl;
+        std::cerr << "Example: " << argv[0] << " --cid=111 --verbose"
+            << std::endl;
+        retCode = 1;
+    } else {
+        bool const verbose{commandlineArguments.count("verbose") != 0};
+        uint16_t const cid = std::stoi(commandlineArguments["cid"]);
     
-    cluon::OD4Session od4{cid};
+        cluon::OD4Session od4{cid};
 
-   int32_t someVariable{0};
+        int32_t someVariable{0};
 
-    auto onSensors{[&od4, &someVariable](cluon::data::Envelope &&envelope)
-      {
-        auto msg = cluon::extractMessage<tme290::grass::Sensors>(
+        auto onSensors{[&od4, &someVariable](cluon::data::Envelope &&envelope)
+        {
+            auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
         
-        someVariable++;
+            someVariable++;
 
-        tme290::grass::Control control;
+            tme290::grass::Control control;
 
         // After 20 steps, start pausing on every other step.
-        if (someVariable > 20 && someVariable % 2 == 0) {
-          control.command(0);
-        } else {
-          control.command(5);
-        }
+            if (someVariable > 20 && someVariable % 2 == 0) {
+                control.command(0);
+            } else {
+                control.command(5);
+            }
 
-        std::cout << "Rain reading " << msg.rain() << ", direction (" <<
-         msg.rainCloudDirX() << ", " << msg.rainCloudDirY() << ")" << std::endl; 
+            std::cout << "Rain reading " << msg.rain() << ", direction (" 
+                << msg.rainCloudDirX() << ", " << msg.rainCloudDirY()
+                << ")" << std::endl; 
 
-        od4.send(control);
-      }};
+            od4.send(control);
+        }};
 
-    auto onStatus{[&verbose](cluon::data::Envelope &&envelope)
-      {
-        auto msg = cluon::extractMessage<tme290::grass::Status>(
-            std::move(envelope));
+        auto onStatus{[&verbose](cluon::data::Envelope &&envelope)
+        {
+            auto msg = cluon::extractMessage<tme290::grass::Status>(
+                std::move(envelope));
+            if (verbose) {
+                std::cout << "Status at time " << msg.time() << ": " 
+                    << msg.grassMean() << "/" << msg.grassMax() << std::endl;
+            }
+        }};
+
+        od4.dataTrigger(tme290::grass::Sensors::ID(), onSensors);
+        od4.dataTrigger(tme290::grass::Status::ID(), onStatus);
+
         if (verbose) {
-          std::cout << "Status at time " << msg.time() << ": " 
-            << msg.grassMean() << "/" << msg.grassMax() << std::endl;
+            std::cout << 
+                "All systems ready, let's cut some grass!" << std::endl;
         }
-      }};
 
-    od4.dataTrigger(tme290::grass::Sensors::ID(), onSensors);
-    od4.dataTrigger(tme290::grass::Status::ID(), onStatus);
+        tme290::grass::Control control;
+        control.command(0);
+        od4.send(control);
 
-    if (verbose) {
-      std::cout << "All systems ready, let's cut some grass!" << std::endl;
+        while (od4.isRunning()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+
+        retCode = 0;
     }
-
-    tme290::grass::Control control;
-    control.command(0);
-    od4.send(control);
-
-    while (od4.isRunning()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    }
-
-    retCode = 0;
-  }
-  return retCode;
+    return retCode;
 }
+
