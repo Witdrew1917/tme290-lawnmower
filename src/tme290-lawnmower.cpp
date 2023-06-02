@@ -1,24 +1,6 @@
-/*
- * Copyright (C) 2019 Ola Benderius
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-#include <iostream>
-
 #include "cluon-complete.hpp"
 #include "tme290-sim-grass-msg.hpp"
+#include "behaviour.hpp"
 
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{0};
@@ -37,28 +19,51 @@ int32_t main(int32_t argc, char **argv) {
     
         cluon::OD4Session od4{cid};
 
-        int32_t someVariable{0};
+        Behaviour behaviour;
+        behaviour.set_initial_states();
+        behaviour.set_impassable_objects();
+        behaviour.set_instruction_set();
+        behaviour.map_width = 40;
+        behaviour.map_height = 40;
 
-        auto onSensors{[&od4, &someVariable](cluon::data::Envelope &&envelope)
+        float battery_power{0.0};
+
+        auto onSensors{[&od4, &behaviour, &battery_power]
+            (cluon::data::Envelope &&envelope)
         {
             auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
         
-            someVariable++;
-
             tme290::grass::Control control;
-
-        // After 20 steps, start pausing on every other step.
-            if (someVariable > 20 && someVariable % 2 == 0) {
-                control.command(0);
-            } else {
-                control.command(5);
+            
+            if (msg.rain() >= 0.001) { 
+                behaviour.transition("CUTWETGRASS"); 
             }
 
-            std::cout << "Rain reading " << msg.rain() << ", direction (" 
+            if (msg.rain() < 0.001) { 
+                behaviour.transition("CUTGRASS"); 
+            }
+            
+            const double cost = behaviour.cost_to_home();
+
+            if (double(msg.battery()) <= 1.1*cost) {
+                behaviour.transition("MOVETOCHARGER");
+            }
+
+            control.command(behaviour.action());
+            
+
+
+            std::cout << " Change in batery: " 
+                << (msg.battery() - behaviour.battery) << std::endl;
+            
+            behaviour.battery = msg.battery();
+
+            
+            /*std::cout << "Rain reading " << msg.rain() << ", direction (" 
                 << msg.rainCloudDirX() << ", " << msg.rainCloudDirY()
                 << ")" << std::endl; 
-
+            */
             od4.send(control);
         }};
 
@@ -66,10 +71,12 @@ int32_t main(int32_t argc, char **argv) {
         {
             auto msg = cluon::extractMessage<tme290::grass::Status>(
                 std::move(envelope));
+            /*
             if (verbose) {
                 std::cout << "Status at time " << msg.time() << ": " 
                     << msg.grassMean() << "/" << msg.grassMax() << std::endl;
             }
+            */
         }};
 
         od4.dataTrigger(tme290::grass::Sensors::ID(), onSensors);

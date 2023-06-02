@@ -79,7 +79,7 @@ set(LIBRARIES Threads::Threads)
 
 ################################################################################
 # Create executable.
-add_executable(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp)
+add_executable(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/behaviour.cpp)
 target_link_libraries(${PROJECT_NAME} ${LIBRARIES})
 
 add_executable(${PROJECT_NAME}-trainer ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}-trainer.cpp ${CMAKE_BINARY_DIR}/tme290-sim-grass-msg.hpp)
